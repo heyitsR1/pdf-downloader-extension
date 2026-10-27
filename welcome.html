@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome to PDF Downloader — Setup & Guide</title>
+  <!-- Google Fonts for premium typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="welcome.css">
+  <script src="mock-chrome.js"></script>
+</head>
+<body>
+  <!-- Background Glows -->
+  <div class="glow-bg">
+    <div class="glow-sphere glow-sphere-1"></div>
+    <div class="glow-sphere glow-sphere-2"></div>
+  </div>
+
+  <div id="app">
+    <!-- Navbar / Header -->
+    <header class="navbar">
+      <div class="nav-container">
+        <div class="brand">
+          <img src="icon48.png" alt="PDF Downloader Logo" class="brand-logo" width="28" height="28">
+          <span class="brand-name">PDF Downloader</span>
+        </div>
+        <div class="nav-actions">
+          <a href="https://aarohan@tailsgate.com" id="btnSupport" class="nav-link">Support</a>
+          <a href="#" id="navUpgradeBtn" class="nav-btn-pro">
+            <span class="star-icon">✦</span> Upgrade to Pro
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="content-wrapper">
+      
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <div class="hero-text">
+          <div class="badge-new">Version 1.0.0 is Live</div>
+          <h1 class="hero-title">Unlock Any PDF.<br><span class="text-highlight">No Download Button Needed.</span></h1>
+          <p class="hero-subtitle">
+            Can't find the download link? PDF Downloader intercepts, detects, and saves protected, hidden, view-only, or print-disabled documents automatically.
+          </p>
+          <div class="hero-cta">
+            <a href="#pin-guide" class="btn btn-primary-glow">Get Started</a>
+            <a href="#license-section" class="btn btn-secondary-outline">Activate Pro License</a>
+          </div>
+        </div>
+
+        <!-- Live Extension Simulator -->
+        <div class="hero-visual">
+          <div class="simulator-window">
+            <div class="window-header">
+              <div class="window-dots">
+                <span class="dot-red"></span>
+                <span class="dot-yellow"></span>
+                <span class="dot-green"></span>
+              </div>
+              <div class="window-tab">
+                <span class="tab-icon">📄</span>
+                <span class="tab-title">Scribd — Restricted Document</span>
+              </div>
+            </div>
+            
+            <div class="window-body">
+              <!-- Mock Webpage View -->
+              <div class="mock-webpage">
+                <div class="mock-document-page">
+                  <div class="document-overlay">
+                    <span class="lock-icon">🔒</span>
+                    <h3>Protected Preview</h3>
+                    <p>Direct printing and downloading are disabled by the publisher.</p>
+                  </div>
+                  <div class="mock-skeleton-line short"></div>
+                  <div class="mock-skeleton-line"></div>
+                  <div class="mock-skeleton-line"></div>
+                  <div class="mock-skeleton-line short"></div>
+                  <div class="mock-skeleton-line"></div>
+                </div>
+              </div>
+
+              <!-- Animated Mini Extension Popup -->
+              <div class="mock-extension-popup">
+                <div class="mini-popup-header">
+                  <div class="mini-logo">
+                    <img src="icon16.png" alt="Icon" width="12" height="12">
+                    <span>PDF Downloader</span>
+                  </div>
+                  <span id="simulatorStatusDot" class="status-indicator-dot scanning"></span>
+                </div>
+                
+                <div class="mini-popup-body">
+                  <div id="simulatorScanning" class="simulator-state">
+                    <div class="spinner-small"></div>
+                    <span>Scanning active tab...</span>
+                  </div>
+                  
+                  <div id="simulatorDetected" class="simulator-state hidden">
+                    <div class="pdf-item-mini">
+                      <div class="pdf-item-info">
+                        <span class="pdf-name">restricted_presentation_2026.pdf</span>
+                        <span class="pdf-size">14.2 MB • Google APIs</span>
+                      </div>
+                      <button id="btnSimulateDownload" class="btn-mini-download">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                          <polyline points="7 10 12 15 17 10"></polyline>
+                          <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Download
+                      </button>
+                    </div>
+                  </div>
+
+                  <div id="simulatorDownloading" class="simulator-state hidden">
+                    <div class="progress-bar-container">
+                      <div class="progress-bar-label">
+                        <span>Downloading file...</span>
+                        <span id="progressBarPercent">0%</span>
+                      </div>
+                      <div class="progress-bar-track">
+                        <div id="progressBarFill" class="progress-bar-fill"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div id="simulatorSuccess" class="simulator-state hidden">
+                    <div class="success-alert">
+                      <span class="success-icon">✓</span>
+                      <div>
+                        <div class="success-title">Successfully Unlocked!</div>
+                        <div class="success-desc">Saved to your Downloads folder.</div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pin Guide Section -->
+      <section id="pin-guide" class="section-container">
+        <h2 class="section-title text-center">Pin the Extension for Easy Access</h2>
+        <p class="section-subtitle text-center">Chrome hides new extensions by default. Pin it now so you can unlock files with one click.</p>
+        
+        <div class="pin-steps">
+          <div class="pin-step-card">
+            <div class="step-num">1</div>
+            <h3>Open Toolbar</h3>
+            <p>Click the puzzle piece icon (🧩) in the top-right corner of your browser toolbar.</p>
+          </div>
+          
+          <div class="pin-step-card">
+            <div class="step-num">2</div>
+            <h3>Find Extension</h3>
+            <p>Locate <strong>PDF Downloader</strong> from your list of installed extensions.</p>
+          </div>
+
+          <div class="pin-step-cardHighlight">
+            <div class="step-num">3</div>
+            <h3>Click Pin Icon</h3>
+            <p>Click the pushpin icon (📌) next to it. It will turn blue and stay on your toolbar!</p>
+            <div class="pin-demo-animation">
+              <span class="mock-extension-item">
+                <img src="icon16.png" alt="Icon" width="16" height="16">
+                <span>PDF Downloader</span>
+                <span class="mock-pin-btn">📌</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Features Highlights Grid -->
+      <section class="section-container">
+        <h2 class="section-title text-center">Powerful Features</h2>
+        
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🔓</div>
+            <h3>Bypass Viewer Restrictions</h3>
+            <p>Save files that are view-only, locked, print-protected, or do not expose direct download links.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>One-Click interception</h3>
+            <p>Simply navigate to a website hosting a PDF. The extension auto-detects and loads it onto your pop-up dashboard.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">📦</div>
+            <h3>Bulk Download (Pro)</h3>
+            <p>Save all detected PDFs on a page in a single operation, zipped for convenience.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>No Account or Signup</h3>
+            <p>Processes all documents directly in your browser. Fully private, transparent, and lightweight.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- License Activation / Free Credits Section -->
+      <section id="license-section" class="section-container">
+        <div class="license-wrapper">
+          <div class="license-grid">
+            <!-- Left Panel: Info & Buy -->
+            <div class="license-info-card">
+              <h2 class="card-title">Activate PDF Downloader Pro</h2>
+              <p class="card-desc">
+                Gain access to unlimited downloads, bulk saving, and advanced document interception options. Support active development with a one-time lifetime license.
+              </p>
+              
+              <ul class="benefit-list">
+                <li><span>✦</span> Unlimited PDF downloads (Bypasses the 5-free limit)</li>
+                <li><span>✦</span> Lifetime updates & high priority support</li>
+                <li><span>✦</span> One-click Bulk Downloads to ZIP archives</li>
+                <li><span>✦</span> Premium, uninterrupted experience</li>
+              </ul>
+
+              <div class="price-box">
+                <span class="price-tag">$4.99</span>
+                <span class="price-details">One-time purchase • Lifetime access</span>
+              </div>
+
+              <a href="#" id="btnBuyLicensePage" class="btn btn-buy-now">
+                Buy Pro License Key
+              </a>
+            </div>
+
+            <!-- Right Panel: Activation Form -->
+            <div class="license-form-card">
+              <div id="freeStatusBox" class="free-status-card">
+                <div class="free-status-header">
+                  <span class="badge-free">Free Tier</span>
+                  <span id="freeCreditsDisplay" class="free-credits-text">Loading downloads...</span>
+                </div>
+                <div class="progress-track">
+                  <div id="freeProgressBar" class="progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <div id="proStatusBox" class="pro-status-banner hidden">
+                <div class="pro-status-inner">
+                  <span class="pro-star-glow">✦</span>
+                  <div>
+                    <h3 class="pro-banner-title">Pro Mode Active</h3>
+                    <p class="pro-banner-desc">Unlimited downloads & premium features unlocked.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="activation-form-wrapper">
+                <h3 class="form-title">Enter License Key</h3>
+                <p class="form-desc">Already bought a license? Enter your Freemius license key below to activate Pro features.</p>
+                
+                <div class="form-group">
+                  <input 
+                    type="text" 
+                    id="licenseInputPage" 
+                    placeholder="XXXX-XXXX-XXXX-XXXX" 
+                    autocomplete="off" 
+                    spellcheck="false"
+                    class="license-key-input"
+                  >
+                  <button id="btnActivatePage" class="btn btn-primary">
+                    Activate Pro
+                  </button>
+                </div>
+                
+                <div id="activationErrorPage" class="activation-error-msg hidden"></div>
+                <div id="activationSuccessPage" class="activation-success-msg hidden">
+                  <span class="success-checkmark">✓</span> License activated! Welcome to Pro!
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-container">
+        <p>&copy; 2026 PDF Downloader. All rights reserved.</p>
+        <div class="footer-links">
+          <a href="https://aarohan@tailsgate.com">Contact Support</a>
+          <span class="divider">•</span>
+          <span class="sec-text">No account signup required</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="welcome.js"></script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Downloader</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="header-logo">
+        <img src="icon48.png" alt="PDF Downloader Logo" class="logo-icon-img" width="18" height="18">
+        <span class="brand-name">PDF Downloader</span>
+      </div>
+      
+      <div class="header-right">
+        <button id="btnRefresh" class="icon-btn" title="Refresh Detected PDFs">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
+        <div id="proBadge" class="pro-badge hidden">
+          <span class="pro-star">✦</span> Pro
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="popup-main">
+
+      <!-- ── DEFAULT VIEW ── -->
+      <div id="defaultView" class="view-container">
+
+        <!-- Credits Section (free users) -->
+        <div id="creditsSection" class="credits-card card-fade-in">
+          <div class="credits-header">
+            <span class="credits-label">Free downloads used</span>
+            <span id="creditsDisplay" class="credits-count">0 / 5</span>
+          </div>
+          <div class="progress-track">
+            <div id="progressBar" class="progress-fill"></div>
+          </div>
+          <div id="creditsWarning" class="credits-warning hidden">
+            <span class="warning-dot"></span>
+            <span id="creditsWarningText">1 credit remaining</span>
+          </div>
+        </div>
+
+        <!-- Pro Status Section (pro users) -->
+        <div id="proSection" class="pro-status-card card-fade-in hidden">
+          <span class="pro-star-lg">✦</span>
+          <span class="pro-status-text">Pro · Unlimited downloads</span>
+        </div>
+
+        <!-- PDF List & Header -->
+        <div class="list-section">
+          <div class="list-header">
+            <span class="list-title">Detected Files</span>
+            <div class="status-indicator">
+              <div class="dot" id="statusDot"></div>
+              <span id="statusText" class="status-text">Scanning…</span>
+            </div>
+          </div>
+          
+          <button id="btnBulkDownload" class="btn btn-bulk" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Bulk Download All (Requires Pro)</span>
+          </button>
+
+          <div id="pdfList" class="pdf-list"></div>
+        </div>
+
+        <!-- Upgrade CTA (free users only) -->
+        <div id="upgradeSection" class="upgrade-card card-fade-in">
+          <div class="upgrade-inner">
+            <div class="upgrade-header">
+              <span class="crown-icon">🔓</span>
+              <div class="upgrade-text">
+                <span class="upgrade-title">Unlock Restricted & Embedded PDFs</span>
+                <span class="upgrade-subtitle">One-time $4.99 · Save view-only, print-blocked, and locked files</span>
+              </div>
+            </div>
+            <button id="btnUpgrade" class="btn btn-upgrade">
+              Unlock All PDFs Now · $4.99
+            </button>
+            <button id="btnShowActivate" class="btn-text-link">
+              Already purchased? Enter license key →
+            </button>
+          </div>
+        </div>
+
+        <!-- Deactivate link (pro users only) -->
+        <div id="deactivateSection" class="hidden">
+          <button id="btnDeactivate" class="btn-text-link btn-text-danger">
+            Deactivate license
+          </button>
+        </div>
+
+      </div><!-- /#defaultView -->
+
+      <!-- ── LICENSE ACTIVATION VIEW ── -->
+      <div id="activationView" class="activation-card card-fade-in hidden">
+        <div class="activation-header">
+          <button id="btnBackFromActivate" class="back-btn" aria-label="Back">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+          <span class="activation-title">Activate License</span>
+        </div>
+        <p class="activation-hint">
+          Enter the license key from your purchase confirmation email.
+        </p>
+        <input
+          type="text"
+          id="licenseKeyInput"
+          class="license-input"
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <div id="activationError" class="activation-error hidden"></div>
+        <button id="btnActivate" class="btn btn-primary" style="margin-top:4px;">
+          Activate License
+        </button>
+        <a id="btnBuyLicense" href="#" class="btn-text-link" style="text-align:center;display:block;margin-top:10px;">
+          Don't have a key? Buy now →
+        </a>
+      </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span class="footer-note">No sign-in required</span>
+      <a id="supportLink" href="#" class="footer-support">Support →</a>
+    </footer>
+
+  </div>
+  <script src="jszip.min.js"></script>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
