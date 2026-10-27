@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PDF Downloader \u2013 Save Any PDF, No Download Button Needed",
   "short_name": "PDF Downloader",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Detect and save any PDF on any webpage—even embedded, protected, or hidden ones. Download with one click, no signup needed.",
   "permissions": ["webRequest", "downloads", "storage", "scripting"],
   "host_permissions": [

@@ -311,6 +311,74 @@
         background: rgba(255,255,255,0.1);
         color: #F7F7F7;
       }
+
+      .pdfdl-license-box {
+        margin: 14px 0 0;
+        padding: 14px;
+        background: #1F1F1F;
+        border: 1px solid rgba(255,255,255,0.09);
+        border-radius: 12px;
+      }
+
+      .pdfdl-license-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #F7F7F7;
+        margin: 0 0 8px;
+      }
+
+      .pdfdl-license-row {
+        display: flex;
+        gap: 8px;
+      }
+
+      .pdfdl-license-input {
+        flex: 1;
+        min-width: 0;
+        background: #121212;
+        border: 1px solid rgba(255,255,255,0.14);
+        border-radius: 9px;
+        color: #F7F7F7;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        padding: 9px 10px;
+        outline: none;
+      }
+
+      .pdfdl-license-input:focus {
+        border-color: rgba(229, 62, 62, 0.65);
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.15);
+      }
+
+      .pdfdl-license-input::placeholder { color: #5A5A5A; }
+
+      .pdfdl-license-btn {
+        background: #E53E3E;
+        color: #fff;
+        border: none;
+        border-radius: 9px;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 9px 14px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 150ms ease;
+      }
+
+      .pdfdl-license-btn:hover:not(:disabled) { background: #C53030; }
+      .pdfdl-license-btn:disabled { opacity: 0.65; cursor: default; }
+
+      .pdfdl-license-msg {
+        font-size: 11px;
+        margin: 8px 0 0;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      .pdfdl-license-msg.is-error { color: #F56565; }
+      .pdfdl-license-msg.is-ok { color: #48BB78; }
+      .pdfdl-license-msg.hidden { display: none; }
     `;
     document.head.appendChild(style);
   }
@@ -392,6 +460,24 @@
           <span class="pdfdl-no-sub-note">No subscriptions. No recurring fees. Ever.</span>
         </div>
 
+        <div class="pdfdl-license-box">
+          <p class="pdfdl-license-title">Already purchased? Enter your license key</p>
+          <div class="pdfdl-license-row">
+            <input
+              id="pdfdl-license-input"
+              class="pdfdl-license-input"
+              type="text"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="Paste your license key"
+              aria-label="License key"
+            />
+            <button class="pdfdl-license-btn" id="pdfdl-license-btn">Activate</button>
+          </div>
+          <p class="pdfdl-license-msg hidden" id="pdfdl-license-msg"></p>
+        </div>
+
         <div class="pdfdl-footer-row">
           <button class="pdfdl-maybe-later" id="pdfdl-maybe-later">Maybe later</button>
           <a href="mailto:${SUPPORT_EMAIL}" class="pdfdl-support-link">Need help? Contact us →</a>
@@ -448,6 +534,67 @@
 
     const maybeLater = activeBackdrop.querySelector('#pdfdl-maybe-later');
     maybeLater?.addEventListener('click', close);
+
+    // ── License activation from inside the paywall ───────────────────────────
+    // Mohit paid and then had no way in: activation only existed in the popup
+    // behind a small text link. This is the same activation path, reachable
+    // from the modal he actually sees when credits run out.
+    const licenseInput = activeBackdrop.querySelector('#pdfdl-license-input');
+    const licenseBtn = activeBackdrop.querySelector('#pdfdl-license-btn');
+    const licenseMsg = activeBackdrop.querySelector('#pdfdl-license-msg');
+
+    function setLicenseMsg(text, kind) {
+      if (!licenseMsg) return;
+      licenseMsg.textContent = text;
+      licenseMsg.classList.remove('hidden', 'is-error', 'is-ok');
+      licenseMsg.classList.add(kind === 'ok' ? 'is-ok' : 'is-error');
+    }
+
+    async function activate() {
+      const key = String(licenseInput?.value || '').trim();
+      if (!key) {
+        setLicenseMsg('Please enter your license key.', 'error');
+        licenseInput?.focus();
+        return;
+      }
+      if (licenseBtn) {
+        licenseBtn.disabled = true;
+        licenseBtn.textContent = 'Activating…';
+      }
+      setLicenseMsg('Contacting the license server…', 'ok');
+      try {
+        const res = await chrome.runtime.sendMessage({
+          type: 'ACTIVATE_LICENSE',
+          key,
+          origin: 'paywall-modal',
+        });
+        if (res?.ok) {
+          setLicenseMsg('✓ Activated. Pro is unlocked — you can download now.', 'ok');
+          if (licenseBtn) licenseBtn.textContent = '✓ Activated';
+          setTimeout(close, 1800);
+        } else {
+          setLicenseMsg(res?.error || 'Activation failed. Please check your key.', 'error');
+          if (licenseBtn) {
+            licenseBtn.disabled = false;
+            licenseBtn.textContent = 'Activate';
+          }
+        }
+      } catch (err) {
+        setLicenseMsg('Could not reach the extension. Reload the page and try again.', 'error');
+        if (licenseBtn) {
+          licenseBtn.disabled = false;
+          licenseBtn.textContent = 'Activate';
+        }
+      }
+    }
+
+    licenseBtn?.addEventListener('click', activate);
+    licenseInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        activate();
+      }
+    });
   }
 
   // ── Listen for trigger from background ─────────────────────────────────────

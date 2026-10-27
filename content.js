@@ -1,5 +1,15 @@
 // content.js — runs in ISOLATED world
 
+const TAG = '[PDFDownloader]';
+
+function log(...args) {
+  console.log(TAG, ...args);
+}
+
+function warn(...args) {
+  console.warn(TAG, ...args);
+}
+
 // Helper for safe messaging
 async function safeSendMessage(msg) {
   try {
@@ -90,18 +100,28 @@ function arrayBufferToBase64(buffer) {
   return btoa(chunks.join(''));
 }
 
+function latestMemoryEntry() {
+  for (let i = memoryOrder.length - 1; i >= 0; i--) {
+    const entry = memoryPdfs.get(memoryOrder[i]);
+    if (entry) return entry;
+  }
+  return null;
+}
+
 function triggerBlobDownload(entry, filename) {
+  const name = /\.pdf$/i.test(filename || '') ? filename : `${filename || 'document'}.pdf`;
   const blob = new Blob([entry.buffer], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename || filenameFromEntry(entry);
+  a.download = name;
   a.rel = 'noopener';
   a.style.display = 'none';
   (document.body || document.documentElement).appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+  log('blob download triggered', name, `${entry.size}b`, `mime=application/pdf`);
 }
 
 function trimMemory() {
@@ -134,16 +154,27 @@ function captureUrl(url, alreadyStored) {
 function captureBuffer(data) {
   const id = String(data.id || '').slice(0, 80);
   const buffer = data.buffer;
-  if (!id || !isPdfBuffer(buffer)) return;
+  if (!id || !isPdfBuffer(buffer)) {
+    warn('received buffer but it is not a PDF', id, buffer?.byteLength);
+    return;
+  }
 
   const size = Number(data.size) || buffer.byteLength;
   const now = Date.now();
   let entry = memoryPdfs.get(id);
+  log('buffer received', id, `${size}b`, 'source=' + (data.source || '?'));
 
   if (!entry) {
-    entry = [...memoryPdfs.values()].find((candidate) =>
-      Math.abs(candidate.size - size) <= Math.max(65536, candidate.size * 0.2) &&
-      now - candidate.capturedAt < 10000
+    // Only merge captures with an identical byte length. The old "within 20%
+    // or 64KB" heuristic merged two *different* PDFs opened seconds apart into
+    // a single entry, so the download served whichever arrived first. The id
+    // is already a content fingerprint, so identical bytes share an id and
+    // never need a fuzzy match.
+    entry = [...memoryPdfs.values()].find(
+      (candidate) =>
+        candidate.size === size &&
+        candidate.id !== id &&
+        now - candidate.capturedAt < 10000
     );
   }
 
@@ -225,6 +256,7 @@ window.addEventListener('message', (event) => {
   if (data.type === 'PDF_DL_URL' && data.url) {
     captureUrl(data.url, false);
   } else if (data.type === 'PDF_DL_BUFFER') {
+    log('buffer message from', event.origin || 'unknown origin');
     captureBuffer(data);
   } else if (data.type === 'PDF_DL_META') {
     updateMemoryLabel(data.id, data.label);
@@ -280,6 +312,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
 }
 
 function showUrlButton(url) {
+  // A URL entry must never displace captured bytes: the bytes are the only
+  // thing that can actually be saved on an encrypted viewer.
+  if (latest && latest.kind === 'memory') {
+    log('ignoring url entry, memory capture already active', url);
+    return;
+  }
   latest = { kind: 'url', url, filename: filenameFromUrl(url) };
   renderFloatingButton();
 }
@@ -381,6 +419,7 @@ function renderFloatingButton() {
       const res = await safeSendMessage(message);
       if (res?.ok) {
         textSpan.textContent = '✓ Downloading!';
+        log('download started', filename, active.kind);
         await safeSendMessage({
           type: 'DOWNLOAD_COMPLETE',
           filename,
@@ -389,7 +428,21 @@ function renderFloatingButton() {
         });
       } else if (res?.error === 'credits_exhausted') {
         textSpan.textContent = 'Upgrade required';
+      } else if (res?.error === 'need_buffer' && res.bufferId) {
+        log('background refused remote url, retrying with captured bytes', res.bufferId);
+        const retry = await safeSendMessage({
+          type: 'DOWNLOAD_BUFFER',
+          id: res.bufferId,
+          filename,
+        });
+        if (retry?.ok) {
+          textSpan.textContent = '✓ Downloading!';
+        } else {
+          warn('buffer retry failed', retry && retry.error);
+          textSpan.textContent = '✗ Error';
+        }
       } else {
+        warn('download failed', filename, res && res.error);
         textSpan.textContent = '✗ Error';
       }
     } catch (err) {

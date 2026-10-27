@@ -49,6 +49,7 @@ const el = {
 
   // Footer
   supportLink:        document.getElementById('supportLink'),
+  btnDiagnostics:     document.getElementById('btnDiagnostics'),
 };
 
 // ── Global States ─────────────────────────────────────────────────────────────
@@ -167,6 +168,39 @@ function filenameForEntry(entry) {
   return entry.kind === 'memory' ? filenameForMemory(entry) : filenameFromUrl(entry.url);
 }
 
+// A captured buffer is the only source that can produce a real file on an
+// encrypted (appx/classx) viewer. If the tab has memory entries, drop URL
+// entries that cannot be decrypted, and never show the same file twice.
+function isEncryptedRemoteUrl(url) {
+  try {
+    return /(^|\.)(appx\.co\.in|classx\.co\.in|static-db[\w-]*\.|pdfweb\.)/i.test(
+      new URL(url).hostname
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function preferMemoryEntries(entries) {
+  const list = Array.isArray(entries) ? entries.slice() : [];
+  const memory = list.filter((e) => e.kind === 'memory');
+  if (!memory.length) return list;
+
+  const seen = new Set();
+  const out = [];
+  for (const entry of list) {
+    if (entry.kind === 'url' && isEncryptedRemoteUrl(entry.url)) continue;
+    const key = entry.kind === 'memory' ? `m:${entry.id}` : `u:${entry.url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+
+  // Stable order: captured bytes first.
+  out.sort((a, b) => (a.kind === 'memory' ? 0 : 1) - (b.kind === 'memory' ? 0 : 1));
+  return out;
+}
+
 function formatBytes(bytes) {
   const n = Number(bytes) || 0;
   if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
@@ -200,11 +234,13 @@ async function loadPdfs(isPro, used) {
     const res = await chrome.runtime.sendMessage({ type: 'GET_PDFS', tabId: tab.id });
     if (!res) throw new Error('No response');
 
-    const entries = res.entries || (res.urls || []).map((url) => ({
-      kind: 'url',
-      id: `url:${url}`,
-      url,
-    }));
+    const entries = preferMemoryEntries(
+      res.entries || (res.urls || []).map((url) => ({
+        kind: 'url',
+        id: `url:${url}`,
+        url,
+      }))
+    );
     detectedEntries = entries;
     updateBulkDownloadButton(isPro, entries.length);
 
@@ -261,7 +297,8 @@ function renderPdfList(entries, isPro, used, tab) {
 
       const message = isMemory
         ? { type: 'DOWNLOAD_BUFFER', tabId: tab.id, id: entry.id, filename }
-        : { type: 'DOWNLOAD_PDF', url: entry.url, filename };
+        : { type: 'DOWNLOAD_PDF', tabId: tab.id, url: entry.url, filename };
+      console.log('[PDFDownloader] popup download', entry.kind, filename, message);
 
       try {
         const res = await chrome.runtime.sendMessage(message);
@@ -279,6 +316,32 @@ function renderPdfList(entries, isPro, used, tab) {
             const updatedUsed = await getFreeDownloadCount();
             updateCreditsUI(currentPro, updatedUsed);
           }, 2500);
+        } else if (res?.error === 'need_buffer' && res.bufferId) {
+          btn.textContent = 'Saving captured file…';
+          const retry = await chrome.runtime.sendMessage({
+            type: 'DOWNLOAD_BUFFER',
+            tabId: tab.id,
+            id: res.bufferId,
+            filename,
+          });
+          if (retry?.ok) {
+            btn.textContent = '✓ Done!';
+            await chrome.runtime.sendMessage({
+              type: 'DOWNLOAD_COMPLETE',
+              filename,
+              tabId: tab.id,
+              isPro: currentPro,
+            });
+          } else {
+            btn.textContent = '✗ Error';
+            console.warn('[PDFDownloader] buffer retry failed', retry);
+          }
+          btn.disabled = false;
+          setTimeout(() => { btn.textContent = '↓ Download'; }, 2500);
+        } else if (res?.error === 'encrypted_no_bytes') {
+          btn.textContent = 'No bytes yet';
+          btn.disabled = false;
+          setTimeout(() => { btn.textContent = '↓ Download'; }, 2500);
         } else {
           btn.textContent = '✗ Error';
           btn.disabled = false;
@@ -323,6 +386,39 @@ function renderPdfList(entries, isPro, used, tab) {
 el.supportLink.addEventListener('click', (e) => {
   e.preventDefault();
   chrome.tabs.create({ url: `mailto:${SUPPORT_EMAIL}` });
+});
+
+// One-click diagnostics for support. Mohit can paste this instead of a
+// screenshot, and it carries what the console logging is trying to tell us.
+el.btnDiagnostics?.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  let diag = { ok: false, error: 'no_tab' };
+  try {
+    diag = await chrome.runtime.sendMessage({ type: 'GET_DIAGNOSTICS', tabId: tab?.id });
+  } catch (err) {
+    diag = { ok: false, error: err.message || String(err) };
+  }
+  const report = [
+    'PDF Downloader diagnostics',
+    `extension: v${diag.version || '?'}`,
+    `page: ${tab?.url || '?'}`,
+    `pro: ${diag.isPro}  credits: ${diag.used}/${diag.freeLimit}  key: ${diag.licenseKeyTail || 'none'}`,
+    `entries: ${Array.isArray(diag.entries) ? diag.entries.length : 0}`,
+    ...(diag.entries || []).map(
+      (e, i) =>
+        `  ${i + 1}. ${e.kind} ${e.label || e.id} ${e.size ? `(${e.size}b)` : ''} ${e.url || ''}`
+    ),
+    `error: ${diag.error || 'none'}`,
+  ].join('\n');
+  try {
+    await navigator.clipboard.writeText(report);
+    el.btnDiagnostics.textContent = 'Copied ✓';
+    setTimeout(() => { el.btnDiagnostics.textContent = 'Copy diagnostics'; }, 2000);
+  } catch (_) {
+    el.btnDiagnostics.textContent = 'Copy failed';
+    setTimeout(() => { el.btnDiagnostics.textContent = 'Copy diagnostics'; }, 2000);
+  }
+  console.log('[PDFDownloader] diagnostics\n' + report);
 });
 
 el.btnBulkDownload.addEventListener('click', async () => {
@@ -373,6 +469,11 @@ el.btnBulkDownload.addEventListener('click', async () => {
         if (!res?.ok) throw new Error(res?.error || 'buffer_expired');
         zip.file(uniqueName, base64ToBytes(res.b64));
       } else {
+        // Never put ciphertext in the zip: an appx/classx remote URL is
+        // encrypted and rejects referrer-less requests.
+        if (isEncryptedRemoteUrl(entry.url)) {
+          throw new Error('encrypted remote url has no captured bytes');
+        }
         const response = await fetch(entry.url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.arrayBuffer();

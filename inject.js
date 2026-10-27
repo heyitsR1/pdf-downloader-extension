@@ -15,6 +15,20 @@ const seenBuffers = new WeakSet();
 const seenFingerprints = new Map();
 const seenOrder = [];
 
+const TAG = '[PDFDownloader]';
+
+function log(...args) {
+  try {
+    console.log(TAG, `frame:${location.host}`, ...args);
+  } catch (_) {}
+}
+
+function warn(...args) {
+  try {
+    console.warn(TAG, `frame:${location.host}`, ...args);
+  } catch (_) {}
+}
+
 function isPdfUrl(url) {
   try {
     if (VIEWER_NOISE.test(url)) return false;
@@ -72,18 +86,47 @@ function sourceUrlFor() {
   return '';
 }
 
+function resolveTargetOrigin(target) {
+  // Reading location.origin throws for a cross-origin parent/opener. That must
+  // NOT abort the post: the top frame's content script accepts any source, so
+  // '*' is both safe and required for the classx/appx viewer iframe case.
+  try {
+    const origin = target.location.origin;
+    if (origin && origin !== 'null') return origin;
+  } catch (_) {}
+  return '*';
+}
+
 function postToTop(payload, transfer) {
   const target = window.top || window;
-  let origin;
-  try {
-    origin = target.location.origin;
-  } catch (_) {
-    return;
+  if (!target) return false;
+
+  if (target === window) {
+    try {
+      target.postMessage(payload, '*', transfer || []);
+      return true;
+    } catch (err) {
+      warn('postToSelf failed', err && err.message);
+      return false;
+    }
   }
-  if (!origin || origin === 'null') origin = '*';
+
+  const origin = resolveTargetOrigin(target);
   try {
     target.postMessage(payload, origin, transfer || []);
-  } catch (_) {}
+    return true;
+  } catch (err) {
+    // A '*' target cannot reject, so this is a real failure (e.g. a detached
+    // window). Retrying with '*' after a specific-origin throw is harmless.
+    warn('postToTop failed', origin, err && err.message);
+    try {
+      target.postMessage(payload, '*', transfer || []);
+      return true;
+    } catch (err2) {
+      warn('postToTop retry failed', err2 && err2.message);
+      return false;
+    }
+  }
 }
 
 function pdfStart(bytes) {
@@ -141,40 +184,62 @@ function labelFor() {
   return (title || 'In-memory PDF').slice(0, 120);
 }
 
-function captureBytes(value, source) {
+function captureBytes(value, source, originUrl) {
   const bytes = toBytes(value);
-  if (!bytes || bytes.length < 16 || bytes.length > MAX_BUFFER_BYTES) return null;
+  if (!bytes) return null;
+  if (bytes.length < 16 || bytes.length > MAX_BUFFER_BYTES) {
+    log('skip bytes', source, `${bytes.length}b (below floor or over cap)`);
+    return null;
+  }
 
   const start = pdfStart(bytes);
-  if (start < 0) return null;
+  if (start < 0) {
+    log('skip bytes', source, `${bytes.length}b (no %PDF- in first 1KB)`);
+    return null;
+  }
 
   const view = start === 0 ? bytes : bytes.subarray(start);
   const backing = view.buffer;
-  if (seenBuffers.has(backing)) return null;
+  if (seenBuffers.has(backing)) {
+    log('skip bytes', source, 'already captured this ArrayBuffer');
+    return null;
+  }
 
   const id = fingerprint(view);
   seenBuffers.add(backing);
 
   const now = Date.now();
   const seenAt = seenFingerprints.get(id);
-  if (seenAt && now - seenAt < 10000) return id;
+  if (seenAt && now - seenAt < 10000) {
+    log('dup bytes', source, id);
+    return id;
+  }
 
   seenFingerprints.set(id, now);
   seenOrder.push(id);
   if (seenOrder.length > 32) seenFingerprints.delete(seenOrder.shift());
 
   const copy = view.slice();
-  postToTop(
+  const copyLength = copy.byteLength; // read BEFORE transfer detaches it
+  const posted = postToTop(
     {
       type: 'PDF_DL_BUFFER',
       id,
       buffer: copy.buffer,
-      size: copy.byteLength,
+      size: copyLength,
       label: labelFor(),
       source,
-      sourceUrl: source === 'worker' ? '' : sourceUrlFor(),
+      sourceUrl: source === 'worker' ? '' : (originUrl || sourceUrlFor()),
     },
     [copy.buffer]
+  );
+  log(
+    'captured',
+    source,
+    id,
+    `${copyLength}b`,
+    'offset=' + start,
+    posted ? 'posted->top' : 'POST FAILED'
   );
 
   if (source !== 'worker') {
@@ -241,65 +306,115 @@ function captureAny(value, source, depth) {
   return false;
 }
 
+const decryptedStore = new WeakMap(); // receiver -> last value seen by our setter
+const decryptedOriginal = new WeakMap(); // receiver -> original own descriptor
+
+function readDecrypted(receiver) {
+  const orig = decryptedOriginal.get(receiver);
+  if (orig) {
+    if (orig.get) {
+      try {
+        return orig.get.call(receiver);
+      } catch (_) {}
+    }
+    if ('value' in orig) return orig.value;
+  }
+  return decryptedStore.get(receiver);
+}
+
+function defineDecryptedAccessor(holder) {
+  const setter = function (value) {
+    decryptedStore.set(this, value);
+    try {
+      captureValue(value, 'decryptedFile');
+    } catch (_) {}
+    const orig = decryptedOriginal.get(this);
+    if (orig && orig.set) {
+      try {
+        orig.set.call(this, value);
+      } catch (_) {}
+    }
+  };
+  setter.__pdfdlHook = true;
+
+  const getter = function () {
+    const orig = decryptedOriginal.get(this);
+    if (orig && orig.get) {
+      try {
+        return orig.get.call(this);
+      } catch (_) {}
+    }
+    return decryptedStore.get(this);
+  };
+  getter.__pdfdlHook = true;
+
+  Object.defineProperty(holder, 'decryptedFile', {
+    configurable: true,
+    enumerable: false,
+    get: getter,
+    set: setter,
+  });
+}
+
+function hookHolder(holder, receiver) {
+  if (!holder) return false;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(holder, 'decryptedFile');
+    if (descriptor && descriptor.set && descriptor.set.__pdfdlHook) {
+      const current = readDecrypted(receiver);
+      if (current) {
+        try {
+          captureValue(current, 'decryptedFile');
+        } catch (_) {}
+      }
+      return true;
+    }
+    if (descriptor && receiver && !decryptedOriginal.has(receiver)) {
+      decryptedOriginal.set(receiver, descriptor);
+    }
+    defineDecryptedAccessor(holder);
+    const current = readDecrypted(receiver);
+    if (current) {
+      try {
+        captureValue(current, 'decryptedFile');
+      } catch (_) {}
+    }
+    return true;
+  } catch (err) {
+    warn('decryptedFile hook failed', err && err.message);
+    return false;
+  }
+}
+
 function installDecryptedHook(target) {
   if (!target) return;
+
+  // 1. Window.prototype. The site does `delete window.parent.decryptedFile`,
+  //    which only removes the *own* property. An accessor living on the
+  //    prototype survives that delete, so every later plain assignment still
+  //    runs through our setter. This is what makes the second, third, ... PDF
+  //    in the same page load work — the old own-property-only hook only ever
+  //    caught the first one.
   try {
-    const descriptor = Object.getOwnPropertyDescriptor(target, 'decryptedFile');
-    if (descriptor && descriptor.set && descriptor.set.__pdfdlHook) {
-      try {
-        captureValue(target.decryptedFile, 'decryptedFile');
-      } catch (_) {}
-      return;
-    }
-
-    let current;
-    if (descriptor) {
-      if ('value' in descriptor) {
-        current = descriptor.value;
-      } else if (descriptor.get) {
-        try {
-          current = descriptor.get.call(target);
-        } catch (_) {}
-      }
-    }
-
-    const setter = function (value) {
-      current = value;
-      try {
-        captureValue(value, 'decryptedFile');
-      } catch (_) {}
-      if (descriptor && descriptor.set) {
-        try {
-          descriptor.set.call(this, value);
-        } catch (_) {}
-      }
-    };
-    setter.__pdfdlHook = true;
-
-    const getter = function () {
-      if (descriptor && descriptor.get) {
-        try {
-          return descriptor.get.call(this);
-        } catch (_) {}
-      }
-      return current;
-    };
-
-    Object.defineProperty(target, 'decryptedFile', {
-      configurable: true,
-      enumerable: descriptor ? !!descriptor.enumerable : true,
-      get: getter,
-      set: setter,
-    });
-
-    if (current) captureValue(current, 'decryptedFile');
+    const proto = Object.getPrototypeOf(target);
+    if (proto) hookHolder(proto, target);
   } catch (_) {}
+
+  // 2. Own accessor as well, so we shadow anything the page already defined
+  //    and keep the first-write path intact.
+  hookHolder(target, target);
 }
 
 function installDecryptedHooks() {
   installDecryptedHook(window);
+  // Cross-origin parent: every property read throws, and the capture relay
+  // already reaches the top frame via postToTop('*'). Skip it quietly instead
+  // of logging a scary SecurityError on every interval tick.
   try {
-    if (window.top && window.top !== window) installDecryptedHook(window.top);
+    if (window.top && window.top !== window) {
+      void window.top.location.origin; // throws when cross-origin
+      installDecryptedHook(window.top);
+    }
   } catch (_) {}
 }
 
